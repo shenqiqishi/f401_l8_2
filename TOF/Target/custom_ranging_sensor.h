@@ -34,12 +34,17 @@ extern "C" {
 #define USE_CUSTOM_RANGING_VL53L8CX (1U)
 #endif /* Use custom ranging */
 
-#if (USE_CUSTOM_RANGING_VL53L8CX == 1U)
+#if (USE_CUSTOM_RANGING_VL53L8CX >= 1U)
 #include "vl53l8cx.h"
 #endif /* Use custom ranging */
 
-#if (USE_CUSTOM_RANGING_VL53L8CX == 1U)
-#define CUSTOM_VL53L8CX (0)
+#if (USE_CUSTOM_RANGING_VL53L8CX >= 1U)
+#define CUSTOM_VL53L8CX_0 (0U)
+#define CUSTOM_VL53L8CX    CUSTOM_VL53L8CX_0
+#endif /* Use custom ranging */
+
+#if (USE_CUSTOM_RANGING_VL53L8CX >= 2U)
+#define CUSTOM_VL53L8CX_1 (1U)
 #endif /* Use custom ranging */
 
 #define RANGING_SENSOR_VL53L8CX_ADDRESS     (VL53L8CX_DEVICE_ADDRESS)

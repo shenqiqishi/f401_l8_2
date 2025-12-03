@@ -39,7 +39,8 @@ TOF/App/app_tof.o: ../TOF/App/app_tof.c ../TOF/App/app_tof.h \
  ../Drivers/BSP/Components/vl53l8cx/porting/platform.h \
  ../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_plugin_xtalk.h \
  ../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_api.h \
- ../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_plugin_detection_thresholds.h
+ ../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_plugin_detection_thresholds.h \
+ ../Drivers/CMSIS/Device/ST/STM32F4xx/Include/stm32f401xe.h
 ../TOF/App/app_tof.h:
 ../Core/Inc/main.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h:
@@ -86,3 +87,4 @@ TOF/App/app_tof.o: ../TOF/App/app_tof.c ../TOF/App/app_tof.h \
 ../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_plugin_xtalk.h:
 ../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_api.h:
 ../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_plugin_detection_thresholds.h:
+../Drivers/CMSIS/Device/ST/STM32F4xx/Include/stm32f401xe.h:

@@ -18,15 +18,55 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "custom_ranging_sensor.h"
+#include <string.h>
 
 void *CUSTOM_RANGING_CompObj[CUSTOM_RANGING_INSTANCES_NBR] = {0};
 static RANGING_SENSOR_Drv_t *CUSTOM_RANGING_Drv[CUSTOM_RANGING_INSTANCES_NBR];
 static RANGING_SENSOR_Capabilities_t RANGING_SENSOR_Cap[CUSTOM_RANGING_INSTANCES_NBR];
 
-static void reset_device(void);
+typedef struct
+{
+  GPIO_TypeDef *PwrEnPort;
+  uint16_t PwrEnPin;
+  GPIO_TypeDef *LpPort;
+  uint16_t LpPin;
+  uint16_t TargetAddress;
+} CUSTOM_RANGING_HwConfig_t;
 
-#if (USE_CUSTOM_RANGING_VL53L8CX == 1U)
+#define CUSTOM_VL53L8CX_ADDRESS_STEP   (2U)
+#define CUSTOM_VL53L8CX_DEFAULT_ADDRESS (VL53L8CX_DEVICE_ADDRESS)
+
+#if (CUSTOM_RANGING_INSTANCES_NBR > 0U)
+static const CUSTOM_RANGING_HwConfig_t CUSTOM_RANGING_HwConfig[CUSTOM_RANGING_INSTANCES_NBR] =
+{
+#if (USE_CUSTOM_RANGING_VL53L8CX >= 1U)
+  {
+    CUSTOM_VL53L8CX_0_PWR_EN_PORT,
+    CUSTOM_VL53L8CX_0_PWR_EN_PIN,
+    CUSTOM_VL53L8CX_0_LPn_PORT,
+    CUSTOM_VL53L8CX_0_LPn_PIN,
+    (uint16_t)(CUSTOM_VL53L8CX_DEFAULT_ADDRESS + (1U * CUSTOM_VL53L8CX_ADDRESS_STEP))
+  },
+#endif
+#if (USE_CUSTOM_RANGING_VL53L8CX >= 2U)
+  {
+    CUSTOM_VL53L8CX_1_PWR_EN_PORT,
+    CUSTOM_VL53L8CX_1_PWR_EN_PIN,
+    CUSTOM_VL53L8CX_1_LPn_PORT,
+    CUSTOM_VL53L8CX_1_LPn_PIN,
+    (uint16_t)(CUSTOM_VL53L8CX_DEFAULT_ADDRESS + (2U * CUSTOM_VL53L8CX_ADDRESS_STEP))
+  },
+#endif
+};
+#endif /* CUSTOM_RANGING_INSTANCES_NBR > 0U */
+
+static void reset_device(uint32_t Instance);
+
+#if (USE_CUSTOM_RANGING_VL53L8CX >= 1U)
 static int32_t VL53L8CX_Probe(uint32_t Instance);
+#if (CUSTOM_RANGING_INSTANCES_NBR > 0U)
+static VL53L8CX_Object_t VL53L8CXObj[CUSTOM_RANGING_INSTANCES_NBR];
+#endif
 #endif /* Use custom ranging */
 
 /**
@@ -44,19 +84,33 @@ int32_t CUSTOM_RANGING_SENSOR_Init(uint32_t Instance)
   }
   else
   {
-    reset_device();
+    const CUSTOM_RANGING_HwConfig_t *hw = &CUSTOM_RANGING_HwConfig[Instance];
+
+    reset_device(Instance);
 
     switch (Instance)
     {
-#if (USE_CUSTOM_RANGING_VL53L8CX == 1U)
-      case CUSTOM_VL53L8CX:
+#if (USE_CUSTOM_RANGING_VL53L8CX >= 1U)
+      case CUSTOM_VL53L8CX_0:
+#if (USE_CUSTOM_RANGING_VL53L8CX >= 2U)
+      case CUSTOM_VL53L8CX_1:
+#endif
         if (VL53L8CX_Probe(Instance) != BSP_ERROR_NONE)
         {
           ret = BSP_ERROR_NO_INIT;
         }
         else
         {
-          ret = BSP_ERROR_NONE;
+          if ((hw->TargetAddress != CUSTOM_VL53L8CX_DEFAULT_ADDRESS) &&
+              (CUSTOM_RANGING_Drv[Instance]->SetAddress(CUSTOM_RANGING_CompObj[Instance], hw->TargetAddress) < 0))
+          {
+            ret = BSP_ERROR_COMPONENT_FAILURE;
+          }
+          else
+          {
+            VL53L8CXObj[Instance].IO.Address = hw->TargetAddress;
+            ret = BSP_ERROR_NONE;
+          }
         }
         break;
 #endif /* Use custom ranging */
@@ -412,7 +466,7 @@ int32_t CUSTOM_RANGING_SENSOR_GetPowerMode(uint32_t Instance, uint32_t *pPowerMo
   return ret;
 }
 
-#if (USE_CUSTOM_RANGING_VL53L8CX == 1U)
+#if (USE_CUSTOM_RANGING_VL53L8CX >= 1U)
 /**
   * @brief Register Bus IOs if component ID is OK.
   * @param Instance    Ranging sensor instance.
@@ -423,7 +477,9 @@ static int32_t VL53L8CX_Probe(uint32_t Instance)
   int32_t ret;
   VL53L8CX_IO_t              IOCtx;
   uint32_t                   id;
-  static VL53L8CX_Object_t   VL53L8CXObj;
+  VL53L8CX_Object_t         *pObj = &VL53L8CXObj[Instance];
+
+  memset(pObj, 0, sizeof(VL53L8CX_Object_t));
 
   /* Configure the ranging sensor driver */
   IOCtx.Address     = RANGING_SENSOR_VL53L8CX_ADDRESS;
@@ -433,16 +489,16 @@ static int32_t VL53L8CX_Probe(uint32_t Instance)
   IOCtx.ReadReg     = CUSTOM_VL53L8CX_I2C_READREG;
   IOCtx.GetTick     = BSP_GetTick;
 
-  if (VL53L8CX_RegisterBusIO(&VL53L8CXObj, &IOCtx) != VL53L8CX_OK)
+  if (VL53L8CX_RegisterBusIO(pObj, &IOCtx) != VL53L8CX_OK)
   {
     ret = BSP_ERROR_COMPONENT_FAILURE;
   }
   else
   {
     CUSTOM_RANGING_Drv[Instance] = (RANGING_SENSOR_Drv_t *) &VL53L8CX_RANGING_SENSOR_Driver;
-    CUSTOM_RANGING_CompObj[Instance] = &VL53L8CXObj;
+    CUSTOM_RANGING_CompObj[Instance] = pObj;
 
-    if (VL53L8CX_ReadID(&VL53L8CXObj, &id) != VL53L8CX_OK)
+    if (VL53L8CX_ReadID(pObj, &id) != VL53L8CX_OK)
     {
       ret = BSP_ERROR_COMPONENT_FAILURE;
     }
@@ -469,16 +525,19 @@ static int32_t VL53L8CX_Probe(uint32_t Instance)
 }
 #endif /* Use custom ranging */
 
-static void reset_device(void)
+static void reset_device(uint32_t Instance)
 {
-#if (USE_CUSTOM_RANGING_VL53L8CX == 1U)
-  HAL_GPIO_WritePin(CUSTOM_VL53L8CX_PWR_EN_PORT, CUSTOM_VL53L8CX_PWR_EN_PIN, GPIO_PIN_RESET);
+#if (USE_CUSTOM_RANGING_VL53L8CX >= 1U)
+  const CUSTOM_RANGING_HwConfig_t *hw = &CUSTOM_RANGING_HwConfig[Instance];
+
+  HAL_GPIO_WritePin(hw->PwrEnPort, hw->PwrEnPin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(hw->LpPort, hw->LpPin, GPIO_PIN_RESET);
   HAL_Delay(2);
-  HAL_GPIO_WritePin(CUSTOM_VL53L8CX_PWR_EN_PORT, CUSTOM_VL53L8CX_PWR_EN_PIN, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(hw->PwrEnPort, hw->PwrEnPin, GPIO_PIN_SET);
   HAL_Delay(2);
-  HAL_GPIO_WritePin(CUSTOM_VL53L8CX_LPn_PORT, CUSTOM_VL53L8CX_LPn_PIN, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(hw->LpPort, hw->LpPin, GPIO_PIN_SET);
   HAL_Delay(2);
-  HAL_GPIO_WritePin(CUSTOM_VL53L8CX_LPn_PORT, CUSTOM_VL53L8CX_LPn_PIN, GPIO_PIN_SET);
-  HAL_Delay(2);
+#else
+  (void)Instance;
 #endif /* Use custom ranging */
 }
