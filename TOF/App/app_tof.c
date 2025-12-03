@@ -163,7 +163,8 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
   static VL53L8CX_ResultsData data;
   uint8_t NewDataReady = 0;
 
-  Profile.RangingProfile = RS_PROFILE_4x4_CONTINUOUS;
+  /* Start in 8x8 continuous mode so no manual toggle is required after reset */
+  Profile.RangingProfile = RS_PROFILE_8x8_CONTINUOUS;
   Profile.TimingBudget = TIMING_BUDGET;
   Profile.Frequency = RANGING_FREQUENCY; /* Ranging frequency Hz (shall be consistent with TimingBudget value) */
   Profile.EnableAmbient = 0; /* Enable: 1, Disable: 0 */
@@ -251,11 +252,17 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
       deactivate_sensor(instance);
       continue;
     }
+
+    printf("[TOF] Instance %lu capabilities: zones=%lu, targets=%lu\r\n",
+           (unsigned long)instance,
+           (unsigned long)Cap[instance].NumberOfZones,
+           (unsigned long)Cap[instance].MaxNumberOfTargetsPerZone);
   }
 
   (void)Id;
 
-  Profile.RangingProfile = RS_PROFILE_4x4_CONTINUOUS;
+  /* Default to 8x8 continuous so the wider FoV is active immediately */
+  Profile.RangingProfile = RS_PROFILE_8x8_CONTINUOUS;
   Profile.TimingBudget = TIMING_BUDGET;
   Profile.Frequency = RANGING_FREQUENCY; /* Ranging frequency Hz (shall be consistent with TimingBudget value) */
   Profile.EnableAmbient = 0; /* Enable: 1, Disable: 0 */
@@ -269,7 +276,19 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
       continue;
     }
 
-    CUSTOM_RANGING_SENSOR_ConfigProfile(instance, &Profile);
+    printf("[TOF] Configuring instance %lu with profile %lu\r\n",
+           (unsigned long)instance,
+           (unsigned long)Profile.RangingProfile);
+    status = CUSTOM_RANGING_SENSOR_ConfigProfile(instance, &Profile);
+
+    if (status != BSP_ERROR_NONE)
+    {
+      printf("CUSTOM_RANGING_SENSOR_ConfigProfile failed on instance %lu (error %ld)\n",
+             (unsigned long)instance, (long)status);
+      deactivate_sensor(instance);
+      continue;
+    }
+
     status = CUSTOM_RANGING_SENSOR_Start(instance, RS_MODE_BLOCKING_CONTINUOUS);
 
     if (status != BSP_ERROR_NONE)
