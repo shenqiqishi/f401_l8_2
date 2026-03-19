@@ -16965,7 +16965,7 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
  8006bfe:	605a      	str	r2, [r3, #4]
   Profile.Frequency = RANGING_FREQUENCY; /* Ranging frequency Hz (shall be consistent with TimingBudget value) */
  8006c00:	4b76      	ldr	r3, [pc, #472]	@ (8006ddc <MX_VL53L8CX_SimpleRanging_Process+0x294>)
- 8006c02:	221e      	movs	r2, #30
+ 8006c02:	2214      	movs	r2, #20
  8006c04:	609a      	str	r2, [r3, #8]
   Profile.EnableAmbient = 0; /* Enable: 1, Disable: 0 */
  8006c06:	4b75      	ldr	r3, [pc, #468]	@ (8006ddc <MX_VL53L8CX_SimpleRanging_Process+0x294>)

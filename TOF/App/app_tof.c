@@ -39,7 +39,7 @@ extern "C" {
 /* uncomment following to use directly the bare driver instead of the BSP */
 /* #define USE_BARE_DRIVER */
 #define TIMING_BUDGET (20U) /* 5 ms < TimingBudget < 100 ms */
-#define RANGING_FREQUENCY (30U) /* Ranging frequency Hz (shall be consistent with TimingBudget value) */
+#define RANGING_FREQUENCY (20U) /* Ranging frequency Hz (shall be consistent with TimingBudget value) */
 #define POLLING_PERIOD (1)
 #define TOF_SENSOR_COUNT (CUSTOM_RANGING_INSTANCES_NBR)
 
