@@ -27,7 +27,6 @@ extern "C" {
 #include "main.h"
 #include <stdio.h>
 #include <stdint.h>
-#include <limits.h>
 
 #include "custom_ranging_sensor.h"
 #include "stm32f401xe.h"
@@ -44,6 +43,21 @@ extern "C" {
 #define POLLING_PERIOD (1)
 #define TOF_SENSOR_COUNT (CUSTOM_RANGING_INSTANCES_NBR)
 
+#define TOF_FRAME_SOF_0 (0xAAU)
+#define TOF_FRAME_SOF_1 (0x55U)
+#define TOF_FRAME_VERSION (0x01U)
+#define TOF_FRAME_TYPE_RANGING (0x01U)
+#define TOF_FRAME_TYPE_ERROR (0x02U)
+#define TOF_FRAME_STATUS_NO_TARGET (255U)
+#define TOF_FRAME_DIST_NO_TARGET (0xFFFFU)
+#define TOF_ERROR_SENSOR_OFFLINE (0x01U)
+#define TOF_ERROR_UART_TX_FAIL (0x02U)
+#define TOF_UART_TX_TIMEOUT_MS (20U)
+#define TOF_ZONE_RECORD_SIZE (3U) /* dist_u16 + status_u8 */
+#define TOF_ERROR_PAYLOAD_SIZE (5U) /* error_code_u8 + error_value_u32 */
+#define TOF_FRAME_MAX_SIZE (2U + 1U + 1U + 2U + 4U + 1U + 1U + 1U + 1U + 2U + \
+                            (RANGING_SENSOR_MAX_NB_ZONES * TOF_ZONE_RECORD_SIZE) + 2U)
+
 /* Private variables ---------------------------------------------------------*/
 #ifndef USE_BARE_DRIVER
 static RANGING_SENSOR_Capabilities_t Cap[TOF_SENSOR_COUNT];
@@ -56,6 +70,9 @@ static uint32_t CurrentSensorIdx = 0U;
 static uint8_t SensorActive[TOF_SENSOR_COUNT] = {0};
 static int32_t SensorInitError[TOF_SENSOR_COUNT] = {0};
 static uint32_t ActiveSensorCount = 0U;
+static uint16_t TofFrameSequence = 0U;
+static uint8_t TofBinaryOutputEnabled = 1U;
+static uint32_t TofUartTxFailCount = 0U;
 
 /* Private function prototypes -----------------------------------------------*/
 #ifdef USE_BARE_DRIVER
@@ -77,6 +94,9 @@ static uint32_t get_next_active_sensor(uint32_t current_idx);
 static void deactivate_sensor(uint32_t instance);
 static void reset_current_sensor_index(void);
 static void tof_fatal_loop(const char *msg);
+static uint16_t tof_crc16_ccitt_false(const uint8_t *data, uint32_t len);
+static uint8_t tof_resolution_code_from_zones(uint32_t zone_count);
+static void tof_send_error_frame(uint8_t sensor_id, uint8_t error_code, uint32_t error_value);
 
 void MX_TOF_Init(void)
 {
@@ -259,6 +279,7 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
     if (CUSTOM_RANGING_SENSOR_ReadID(instance, &Id) != BSP_ERROR_NONE)
     {
       printf("CUSTOM_RANGING_SENSOR_ReadID failed on instance %lu\n", (unsigned long)instance);
+      tof_send_error_frame((uint8_t)instance, TOF_ERROR_SENSOR_OFFLINE, (uint32_t)BSP_ERROR_COMPONENT_FAILURE);
       deactivate_sensor(instance);
       continue;
     }
@@ -266,6 +287,7 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
     if (CUSTOM_RANGING_SENSOR_GetCapabilities(instance, &Cap[instance]) != BSP_ERROR_NONE)
     {
       printf("CUSTOM_RANGING_SENSOR_GetCapabilities failed on instance %lu\n", (unsigned long)instance);
+      tof_send_error_frame((uint8_t)instance, TOF_ERROR_SENSOR_OFFLINE, (uint32_t)BSP_ERROR_COMPONENT_FAILURE);
       deactivate_sensor(instance);
       continue;
     }
@@ -302,6 +324,7 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
     {
       printf("CUSTOM_RANGING_SENSOR_ConfigProfile failed on instance %lu (error %ld)\n",
              (unsigned long)instance, (long)status);
+      tof_send_error_frame((uint8_t)instance, TOF_ERROR_SENSOR_OFFLINE, (uint32_t)status);
       deactivate_sensor(instance);
       continue;
     }
@@ -311,6 +334,7 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
     if (status != BSP_ERROR_NONE)
     {
       printf("CUSTOM_RANGING_SENSOR_Start failed on instance %lu\n", (unsigned long)instance);
+      tof_send_error_frame((uint8_t)instance, TOF_ERROR_SENSOR_OFFLINE, (uint32_t)status);
       deactivate_sensor(instance);
       continue;
     }
@@ -326,6 +350,8 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
   {
     tof_fatal_loop("No active VL53L8CX sensors available after start");
   }
+
+  display_commands_banner(CurrentSensorIdx);
 
   printf("[TOF] Entering ranging loop with %lu active sensor(s)\r\n", (unsigned long)ActiveSensorCount);
 
@@ -343,38 +369,6 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
 
     if (status == BSP_ERROR_NONE)
     {
-      printf("[TOF] Sensor %lu result: zones=%lu\r\n",
-             (unsigned long)CurrentSensorIdx,
-             (unsigned long)Result.NumberOfZones);
-      uint32_t targets = (Result.NumberOfZones > 0U) ? Result.ZoneResult[0].NumberOfTargets : 0U;
-      uint32_t min_distance = UINT32_MAX;
-      for (uint32_t zone = 0U; zone < Result.NumberOfZones; zone++)
-      {
-        if (Result.ZoneResult[zone].NumberOfTargets > 0U)
-        {
-          uint32_t distance = Result.ZoneResult[zone].Distance[0];
-          if (distance < min_distance)
-          {
-            min_distance = distance;
-          }
-        }
-      }
-
-      if ((targets > 0U) || (min_distance != UINT32_MAX))
-      {
-        printf("[TOF] Sensor %lu first target distance: %ld mm (status %ld)\r\n",
-               (unsigned long)CurrentSensorIdx,
-               (long)Result.ZoneResult[0].Distance[0],
-               (long)Result.ZoneResult[0].Status[0]);
-        printf("[TOF] Sensor %lu nearest target: %ld mm\r\n",
-               (unsigned long)CurrentSensorIdx,
-               (long)min_distance);
-      }
-      else
-      {
-        printf("[TOF] Sensor %lu reported no targets\r\n", (unsigned long)CurrentSensorIdx);
-      }
-
       print_result(CurrentSensorIdx, &Result);
       CurrentSensorIdx = get_next_active_sensor(CurrentSensorIdx);
     }
@@ -382,6 +376,7 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
     {
       printf("CUSTOM_RANGING_SENSOR_GetDistance failed on instance %lu (error %ld)\n",
              (unsigned long)CurrentSensorIdx, (long)status);
+      tof_send_error_frame((uint8_t)CurrentSensorIdx, TOF_ERROR_SENSOR_OFFLINE, (uint32_t)status);
       deactivate_sensor(CurrentSensorIdx);
 
       if (ActiveSensorCount == 0U)
@@ -404,38 +399,197 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
 
 static void print_result(uint32_t Instance, RANGING_SENSOR_Result_t *Result)
 {
-  printf("[TOF] Summary for sensor %lu\r\n", (unsigned long)Instance);
-
-  for (uint32_t zone = 0U; zone < Result->NumberOfZones; zone++)
+  if (TofBinaryOutputEnabled == 0U)
   {
-    uint32_t targets = Result->ZoneResult[zone].NumberOfTargets;
+    printf("[TOF][TXT] sensor=%lu zones=%lu\r\n",
+           (unsigned long)Instance,
+           (unsigned long)Result->NumberOfZones);
 
-    if (targets > 0U)
+    for (uint32_t zone = 0U; zone < Result->NumberOfZones; zone++)
     {
-      uint32_t dist_u32 = Result->ZoneResult[zone].Distance[0];
-      int16_t dist_raw_i16 = (int16_t)(dist_u32 & 0xFFFFU);
+      if (Result->ZoneResult[zone].NumberOfTargets > 0U)
+      {
+        printf("%lu,%lu,%lu\r\n",
+               (unsigned long)zone,
+               (unsigned long)Result->ZoneResult[zone].Distance[0],
+               (unsigned long)Result->ZoneResult[zone].Status[0]);
+      }
+      else
+      {
+        printf("%lu,%u,%u\r\n",
+               (unsigned long)zone,
+               (unsigned int)TOF_FRAME_DIST_NO_TARGET,
+               (unsigned int)TOF_FRAME_STATUS_NO_TARGET);
+      }
+    }
 
-      /* Format floats as fixed-point to avoid requiring _printf_float. */
-      float_t signal = Result->ZoneResult[zone].Signal[0];
-      float_t ambient = Result->ZoneResult[zone].Ambient[0];
-      uint32_t signal_centi = (signal >= 0.0f) ? (uint32_t)(signal * 100.0f + 0.5f) : 0U;
-      uint32_t ambient_centi = (ambient >= 0.0f) ? (uint32_t)(ambient * 100.0f + 0.5f) : 0U;
+    return;
+  }
 
-        printf("  zone %2lu: dist=%ld mm, raw_i16=%d mm, status=%ld, signal=%lu.%02lu kcps, ambient=%lu.%02lu kcps\r\n",
-             (unsigned long)zone,
-             (long)dist_u32,
-             (int)dist_raw_i16,
-             (long)Result->ZoneResult[zone].Status[0],
-             (unsigned long)(signal_centi / 100U),
-             (unsigned long)(signal_centi % 100U),
-             (unsigned long)(ambient_centi / 100U),
-             (unsigned long)(ambient_centi % 100U));
+  uint8_t frame_buf[TOF_FRAME_MAX_SIZE];
+  uint32_t zone_count = Result->NumberOfZones;
+  uint32_t payload_len;
+  uint32_t idx = 0U;
+  uint16_t crc;
+
+  if (zone_count > RANGING_SENSOR_MAX_NB_ZONES)
+  {
+    zone_count = RANGING_SENSOR_MAX_NB_ZONES;
+  }
+
+  payload_len = zone_count * TOF_ZONE_RECORD_SIZE;
+
+  frame_buf[idx++] = TOF_FRAME_SOF_0;
+  frame_buf[idx++] = TOF_FRAME_SOF_1;
+  frame_buf[idx++] = TOF_FRAME_VERSION;
+  frame_buf[idx++] = TOF_FRAME_TYPE_RANGING;
+
+  frame_buf[idx++] = (uint8_t)(TofFrameSequence & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((TofFrameSequence >> 8) & 0xFFU);
+
+  uint32_t timestamp_ms = HAL_GetTick();
+  frame_buf[idx++] = (uint8_t)(timestamp_ms & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((timestamp_ms >> 8) & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((timestamp_ms >> 16) & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((timestamp_ms >> 24) & 0xFFU);
+
+  frame_buf[idx++] = (uint8_t)Instance;
+  frame_buf[idx++] = tof_resolution_code_from_zones(zone_count);
+  frame_buf[idx++] = (uint8_t)zone_count;
+  frame_buf[idx++] = 0U; /* target index: send target #0 per zone */
+  frame_buf[idx++] = (uint8_t)(payload_len & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((payload_len >> 8) & 0xFFU);
+
+  for (uint32_t zone = 0U; zone < zone_count; zone++)
+  {
+    uint16_t dist_u16;
+    uint8_t status_u8;
+
+    if (Result->ZoneResult[zone].NumberOfTargets > 0U)
+    {
+      uint32_t raw_dist = Result->ZoneResult[zone].Distance[0];
+      if (raw_dist > 0xFFFFU)
+      {
+        raw_dist = 0xFFFFU;
+      }
+      dist_u16 = (uint16_t)raw_dist;
+
+      uint32_t raw_status = Result->ZoneResult[zone].Status[0];
+      status_u8 = (raw_status > 0xFFU) ? 0xFFU : (uint8_t)raw_status;
     }
     else
     {
-      printf("  zone %2lu: no target\r\n", (unsigned long)zone);
+      dist_u16 = TOF_FRAME_DIST_NO_TARGET;
+      status_u8 = TOF_FRAME_STATUS_NO_TARGET;
+    }
+
+    frame_buf[idx++] = (uint8_t)(dist_u16 & 0xFFU);
+    frame_buf[idx++] = (uint8_t)((dist_u16 >> 8) & 0xFFU);
+    frame_buf[idx++] = status_u8;
+  }
+
+  crc = tof_crc16_ccitt_false(&frame_buf[2], idx - 2U);
+  frame_buf[idx++] = (uint8_t)(crc & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((crc >> 8) & 0xFFU);
+
+  if (HAL_UART_Transmit(&hcom_uart[COM1], frame_buf, (uint16_t)idx, TOF_UART_TX_TIMEOUT_MS) == HAL_OK)
+  {
+    TofFrameSequence++;
+  }
+  else
+  {
+    TofUartTxFailCount++;
+    tof_send_error_frame((uint8_t)Instance, TOF_ERROR_UART_TX_FAIL, TofUartTxFailCount);
+  }
+}
+
+static void tof_send_error_frame(uint8_t sensor_id, uint8_t error_code, uint32_t error_value)
+{
+  if (TofBinaryOutputEnabled == 0U)
+  {
+    printf("[TOF][ERR] sensor=%u code=%u value=%lu\r\n",
+           (unsigned int)sensor_id,
+           (unsigned int)error_code,
+           (unsigned long)error_value);
+    return;
+  }
+
+  uint8_t frame_buf[2U + 1U + 1U + 2U + 4U + 1U + 1U + 1U + 1U + 2U + TOF_ERROR_PAYLOAD_SIZE + 2U];
+  uint32_t idx = 0U;
+
+  frame_buf[idx++] = TOF_FRAME_SOF_0;
+  frame_buf[idx++] = TOF_FRAME_SOF_1;
+  frame_buf[idx++] = TOF_FRAME_VERSION;
+  frame_buf[idx++] = TOF_FRAME_TYPE_ERROR;
+
+  frame_buf[idx++] = (uint8_t)(TofFrameSequence & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((TofFrameSequence >> 8) & 0xFFU);
+
+  uint32_t timestamp_ms = HAL_GetTick();
+  frame_buf[idx++] = (uint8_t)(timestamp_ms & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((timestamp_ms >> 8) & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((timestamp_ms >> 16) & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((timestamp_ms >> 24) & 0xFFU);
+
+  frame_buf[idx++] = sensor_id;
+  frame_buf[idx++] = 0U; /* resolution_code not used in error frame */
+  frame_buf[idx++] = 0U; /* zone_count not used in error frame */
+  frame_buf[idx++] = 0U; /* target_index not used in error frame */
+  frame_buf[idx++] = (uint8_t)(TOF_ERROR_PAYLOAD_SIZE & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((TOF_ERROR_PAYLOAD_SIZE >> 8) & 0xFFU);
+
+  frame_buf[idx++] = error_code;
+  frame_buf[idx++] = (uint8_t)(error_value & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((error_value >> 8) & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((error_value >> 16) & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((error_value >> 24) & 0xFFU);
+
+  uint16_t crc = tof_crc16_ccitt_false(&frame_buf[2], idx - 2U);
+  frame_buf[idx++] = (uint8_t)(crc & 0xFFU);
+  frame_buf[idx++] = (uint8_t)((crc >> 8) & 0xFFU);
+
+  if (HAL_UART_Transmit(&hcom_uart[COM1], frame_buf, (uint16_t)idx, TOF_UART_TX_TIMEOUT_MS) == HAL_OK)
+  {
+    TofFrameSequence++;
+  }
+}
+
+static uint16_t tof_crc16_ccitt_false(const uint8_t *data, uint32_t len)
+{
+  uint16_t crc = 0xFFFFU;
+
+  for (uint32_t i = 0U; i < len; i++)
+  {
+    crc ^= (uint16_t)data[i] << 8;
+    for (uint8_t bit = 0U; bit < 8U; bit++)
+    {
+      if ((crc & 0x8000U) != 0U)
+      {
+        crc = (uint16_t)((crc << 1) ^ 0x1021U);
+      }
+      else
+      {
+        crc <<= 1;
+      }
     }
   }
+
+  return crc;
+}
+
+static uint8_t tof_resolution_code_from_zones(uint32_t zone_count)
+{
+  if (zone_count == 16U)
+  {
+    return 1U; /* 4x4 */
+  }
+
+  if (zone_count == 64U)
+  {
+    return 2U; /* 8x8 */
+  }
+
+  return 0U; /* unknown/custom */
 }
 
 static void toggle_resolution(void)
@@ -486,6 +640,7 @@ static void toggle_resolution(void)
     {
       printf("CUSTOM_RANGING_SENSOR_Start failed during toggle on instance %lu\n",
              (unsigned long)instance);
+      tof_send_error_frame((uint8_t)instance, TOF_ERROR_SENSOR_OFFLINE, (uint32_t)status);
       deactivate_sensor(instance);
     }
   }
@@ -527,6 +682,7 @@ static void toggle_signal_and_ambient(void)
     {
       printf("CUSTOM_RANGING_SENSOR_Start failed during toggle on instance %lu\n",
              (unsigned long)instance);
+      tof_send_error_frame((uint8_t)instance, TOF_ERROR_SENSOR_OFFLINE, (uint32_t)status);
       deactivate_sensor(instance);
     }
   }
@@ -554,7 +710,8 @@ static void display_commands_banner(uint32_t Instance)
     }
   }
 
-  printf("Commands: r=resolution, s=signal/ambient, c=clear\r\n\r\n");
+  printf("Output mode  : %s\r\n", (TofBinaryOutputEnabled != 0U) ? "binary frame" : "text debug");
+  printf("Commands: r=resolution, s=signal/ambient, o=toggle output, c=clear\r\n\r\n");
 }
 
 static void handle_cmd(uint8_t cmd)
@@ -571,6 +728,14 @@ static void handle_cmd(uint8_t cmd)
 
     case 'c':
       printf("\r\n[TOF] Manual clear requested\r\n");
+      break;
+
+    case 'o':
+      TofBinaryOutputEnabled = (TofBinaryOutputEnabled != 0U) ? 0U : 1U;
+      printf("\r\n[TOF] Output mode switched to: %s (tx_fail=%lu)\r\n",
+             (TofBinaryOutputEnabled != 0U) ? "binary frame" : "text debug",
+             (unsigned long)TofUartTxFailCount);
+      display_commands_banner(CurrentSensorIdx);
       break;
 
     default:
