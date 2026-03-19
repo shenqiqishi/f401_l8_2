@@ -52,7 +52,7 @@
 #define BSP_BUTTON_USER_IT_PRIORITY         15U
 
 /* I2C1 Frequency in Hz  */
-#define BUS_I2C1_FREQUENCY                  1000000U /* Frequency of I2C1 = 1 MHz */
+#define BUS_I2C1_FREQUENCY                  800000U /* Frequency of I2C1 = 800 KHz */
 
 /* SPI1 Baud rate in bps  */
 #define BUS_SPI1_BAUDRATE                   16000000U /* baud rate of SPIn = 16 Mbps */

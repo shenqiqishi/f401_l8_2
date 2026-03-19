@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 import struct
 import sys
 import time
@@ -20,6 +21,86 @@ ERROR_CODE_MAP = {
     0x01: "sensor_offline",
     0x02: "uart_tx_fail",
 }
+
+
+def _init_stat():
+    return {
+        "n": 0,
+        "sum": 0.0,
+        "sum2": 0.0,
+        "min": None,
+        "max": None,
+    }
+
+
+def _update_stat(stat, x):
+    stat["n"] += 1
+    stat["sum"] += x
+    stat["sum2"] += x * x
+    stat["min"] = x if stat["min"] is None else min(stat["min"], x)
+    stat["max"] = x if stat["max"] is None else max(stat["max"], x)
+
+
+def _print_stability_summary(stability_by_sid, seq_gap_total, frame_count, prefix="[STAB]"):
+    print(f"{prefix} frames={frame_count} seq_lost_total={seq_gap_total}")
+    if not stability_by_sid:
+        print(f"{prefix} no dt_sid samples")
+        return
+
+    for sid in sorted(stability_by_sid.keys()):
+        st = stability_by_sid[sid]
+        n = st["n"]
+        if n <= 0:
+            continue
+        mean = st["sum"] / n
+        var = (st["sum2"] / n) - (mean * mean)
+        if var < 0:
+            var = 0.0
+        std = math.sqrt(var)
+        print(
+            f"{prefix} sid={sid} n={n} dt_sid_mean={mean:.2f}ms "
+            f"std={std:.2f}ms min={st['min']}ms max={st['max']}ms"
+        )
+
+
+def analyze_saved_log(log_path):
+    frame_count = 0
+    seq_gap_total = 0
+    stability_by_sid = {}
+    last_tick_by_sid = {}
+
+    with open(log_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                fr = json.loads(line)
+            except Exception:
+                continue
+
+            frame_count += 1
+            seq_gap_total += int(fr.get("seq_gap", 0) or 0)
+
+            sid = fr.get("sensor_id")
+            if sid is None:
+                continue
+
+            ts = fr.get("timestamp_ms")
+            if ts is None:
+                continue
+
+            ts = int(ts) & 0xFFFFFFFF
+            prev = last_tick_by_sid.get(sid)
+            last_tick_by_sid[sid] = ts
+            if prev is None:
+                continue
+
+            dt_sid = (ts - prev) & 0xFFFFFFFF
+            st = stability_by_sid.setdefault(sid, _init_stat())
+            _update_stat(st, float(dt_sid))
+
+    _print_stability_summary(stability_by_sid, seq_gap_total, frame_count, prefix="[ANALYZE]")
 
 
 def _cell_text(zone):
@@ -304,7 +385,21 @@ def main():
         action="store_true",
         help="real-time terminal visualization for sensor_id 0/1/2 in 8x8 mode",
     )
+    ap.add_argument(
+        "--save-log",
+        default="",
+        help="save decoded frames as JSON lines to the given file path",
+    )
+    ap.add_argument(
+        "--analyze-log",
+        default="",
+        help="offline analyze a saved JSONL log and exit",
+    )
     args = ap.parse_args()
+
+    if args.analyze_log:
+        analyze_saved_log(args.analyze_log)
+        return 0
 
     if args.viz_3sensor_8x8 and args.jsonl:
         print("--viz-3sensor-8x8 cannot be used with --jsonl", file=sys.stderr)
@@ -328,12 +423,19 @@ def main():
     seq_unwrap = CounterUnwrapper(bits=16)
     tick_unwrap = CounterUnwrapper(bits=32)
     tick_unwrap_by_sid = {}
+    stability_by_sid = {}
+    seq_gap_total = 0
     frame_count = 0
     t0 = time.time()
     latest_by_sid = {}
     last_viz_refresh = 0.0
 
     print(f"listening on {args.port}, {args.baud} 8N1 ... Ctrl+C to stop")
+
+    log_fp = None
+    if args.save_log:
+        log_fp = open(args.save_log, "a", encoding="utf-8")
+        print(f"saving log to {args.save_log}")
 
     try:
         while True:
@@ -367,6 +469,14 @@ def main():
                     if seq_delta > 1:
                         seq_gap = seq_delta - 1
                 f["seq_gap"] = seq_gap
+                seq_gap_total += seq_gap
+
+                if dt_sid_ms is not None:
+                    st = stability_by_sid.setdefault(sid, _init_stat())
+                    _update_stat(st, float(dt_sid_ms))
+
+                if log_fp is not None:
+                    log_fp.write(json.dumps(f, ensure_ascii=False) + "\n")
 
                 if args.viz_3sensor_8x8:
                     if (
@@ -415,7 +525,11 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        if log_fp is not None:
+            log_fp.close()
         ser.close()
+
+    _print_stability_summary(stability_by_sid, seq_gap_total, frame_count)
 
     return 0
 

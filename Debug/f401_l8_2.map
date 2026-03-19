@@ -5144,30 +5144,30 @@ LOAD /opt/st/stm32cubeide_1.19.0/plugins/com.st.stm32cube.ide.mcu.externaltools.
  .debug_line    0x00010b74      0x69a ./TOF/Target/app_tof_pin_conf.o
  .debug_line    0x0001120e      0xd0a ./TOF/Target/custom_ranging_sensor.o
 
-.debug_str      0x00000000    0x8e285
- .debug_str     0x00000000    0x8e285 ./Core/Src/main.o
-                              0x81e44 (size before relaxing)
- .debug_str     0x0008e285    0x817d8 ./Core/Src/stm32f4xx_hal_msp.o
- .debug_str     0x0008e285    0x8179f ./Core/Src/stm32f4xx_it.o
- .debug_str     0x0008e285    0x81b65 ./Core/Src/stm32f4xx_nucleo_bus.o
- .debug_str     0x0008e285     0x99d9 ./Core/Src/syscalls.o
- .debug_str     0x0008e285     0x7777 ./Core/Src/sysmem.o
- .debug_str     0x0008e285    0x80f8f ./Core/Src/system_stm32f4xx.o
- .debug_str     0x0008e285       0x79 ./Core/Startup/startup_stm32f401retx.o
- .debug_str     0x0008e285     0x8ba6 ./Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_api.o
- .debug_str     0x0008e285     0x892c ./Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_plugin_detection_thresholds.o
- .debug_str     0x0008e285     0x758e ./Drivers/BSP/Components/vl53l8cx/porting/platform.o
- .debug_str     0x0008e285     0x9c59 ./Drivers/BSP/Components/vl53l8cx/vl53l8cx.o
- .debug_str     0x0008e285    0x81e1d ./Drivers/BSP/STM32F4xx_Nucleo/stm32f4xx_nucleo.o
- .debug_str     0x0008e285    0x819b1 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.o
- .debug_str     0x0008e285    0x8171b ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.o
- .debug_str     0x0008e285    0x8110a ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.o
- .debug_str     0x0008e285    0x81fa0 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_i2c.o
- .debug_str     0x0008e285    0x813c3 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.o
- .debug_str     0x0008e285    0x81992 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.o
- .debug_str     0x0008e285    0x8885f ./TOF/App/app_tof.o
- .debug_str     0x0008e285    0x80e54 ./TOF/Target/app_tof_pin_conf.o
- .debug_str     0x0008e285    0x875bb ./TOF/Target/custom_ranging_sensor.o
+.debug_str      0x00000000    0x8e284
+ .debug_str     0x00000000    0x8e284 ./Core/Src/main.o
+                              0x81e43 (size before relaxing)
+ .debug_str     0x0008e284    0x817d7 ./Core/Src/stm32f4xx_hal_msp.o
+ .debug_str     0x0008e284    0x8179e ./Core/Src/stm32f4xx_it.o
+ .debug_str     0x0008e284    0x81b64 ./Core/Src/stm32f4xx_nucleo_bus.o
+ .debug_str     0x0008e284     0x99d9 ./Core/Src/syscalls.o
+ .debug_str     0x0008e284     0x7777 ./Core/Src/sysmem.o
+ .debug_str     0x0008e284    0x80f8f ./Core/Src/system_stm32f4xx.o
+ .debug_str     0x0008e284       0x79 ./Core/Startup/startup_stm32f401retx.o
+ .debug_str     0x0008e284     0x8ba6 ./Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_api.o
+ .debug_str     0x0008e284     0x892c ./Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_plugin_detection_thresholds.o
+ .debug_str     0x0008e284     0x758e ./Drivers/BSP/Components/vl53l8cx/porting/platform.o
+ .debug_str     0x0008e284     0x9c59 ./Drivers/BSP/Components/vl53l8cx/vl53l8cx.o
+ .debug_str     0x0008e284    0x81e1c ./Drivers/BSP/STM32F4xx_Nucleo/stm32f4xx_nucleo.o
+ .debug_str     0x0008e284    0x819b1 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.o
+ .debug_str     0x0008e284    0x8171b ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.o
+ .debug_str     0x0008e284    0x8110a ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.o
+ .debug_str     0x0008e284    0x81fa0 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_i2c.o
+ .debug_str     0x0008e284    0x813c3 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.o
+ .debug_str     0x0008e284    0x81992 ./Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.o
+ .debug_str     0x0008e284    0x8885e ./TOF/App/app_tof.o
+ .debug_str     0x0008e284    0x80e54 ./TOF/Target/app_tof_pin_conf.o
+ .debug_str     0x0008e284    0x875ba ./TOF/Target/custom_ranging_sensor.o
 
 .comment        0x00000000       0x43
  .comment       0x00000000       0x43 ./Core/Src/main.o
