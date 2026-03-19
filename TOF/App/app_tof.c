@@ -281,8 +281,8 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
   Profile.RangingProfile = RS_PROFILE_8x8_CONTINUOUS;
   Profile.TimingBudget = TIMING_BUDGET;
   Profile.Frequency = RANGING_FREQUENCY; /* Ranging frequency Hz (shall be consistent with TimingBudget value) */
-  Profile.EnableAmbient = 0; /* Enable: 1, Disable: 0 */
-  Profile.EnableSignal = 0; /* Enable: 1, Disable: 0 */
+  Profile.EnableAmbient = 1; /* Enable: 1, Disable: 0 */
+  Profile.EnableSignal = 1; /* Enable: 1, Disable: 0 */
 
   /* set the profile if different from default one */
   for (uint32_t instance = 0U; instance < TOF_SENSOR_COUNT; instance++)
@@ -411,12 +411,20 @@ static void print_result(uint32_t Instance, RANGING_SENSOR_Result_t *Result)
 
     if (targets > 0U)
     {
-      printf("  zone %2lu: dist=%ld mm, status=%ld, signal=%.2f kcps, ambient=%.2f kcps\r\n",
+      /* Format floats as fixed-point to avoid requiring _printf_float. */
+      float_t signal = Result->ZoneResult[zone].Signal[0];
+      float_t ambient = Result->ZoneResult[zone].Ambient[0];
+      uint32_t signal_centi = (signal >= 0.0f) ? (uint32_t)(signal * 100.0f + 0.5f) : 0U;
+      uint32_t ambient_centi = (ambient >= 0.0f) ? (uint32_t)(ambient * 100.0f + 0.5f) : 0U;
+
+      printf("  zone %2lu: dist=%ld mm, status=%ld, signal=%lu.%02lu kcps, ambient=%lu.%02lu kcps\r\n",
              (unsigned long)zone,
              (long)Result->ZoneResult[zone].Distance[0],
              (long)Result->ZoneResult[zone].Status[0],
-             (double)Result->ZoneResult[zone].Signal[0],
-             (double)Result->ZoneResult[zone].Ambient[0]);
+             (unsigned long)(signal_centi / 100U),
+             (unsigned long)(signal_centi % 100U),
+             (unsigned long)(ambient_centi / 100U),
+             (unsigned long)(ambient_centi % 100U));
     }
     else
     {
