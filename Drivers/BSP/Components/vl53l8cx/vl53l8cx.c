@@ -746,6 +746,7 @@ static int32_t vl53l8cx_get_result(VL53L8CX_Object_t *pObj, VL53L8CX_Result_t *p
         pResult->ZoneResult[i].Distance[j] = (uint32_t)data.distance_mm[(VL53L8CX_NB_TARGET_PER_ZONE * i) + j];
 
         /* return Ambient value if ambient rate output is enabled */
+#ifndef VL53L8CX_DISABLE_AMBIENT_PER_SPAD
         if (pObj->IsAmbientEnabled == 1U)
         {
           /* apply ambient value to all targets in a given zone */
@@ -755,8 +756,12 @@ static int32_t vl53l8cx_get_result(VL53L8CX_Object_t *pObj, VL53L8CX_Result_t *p
         {
           pResult->ZoneResult[i].Ambient[j] = 0.0f;
         }
+#else
+        pResult->ZoneResult[i].Ambient[j] = 0.0f;
+#endif
 
         /* return Signal value if signal rate output is enabled */
+#ifndef VL53L8CX_DISABLE_SIGNAL_PER_SPAD
         if (pObj->IsSignalEnabled == 1U)
         {
           pResult->ZoneResult[i].Signal[j] =
@@ -766,6 +771,9 @@ static int32_t vl53l8cx_get_result(VL53L8CX_Object_t *pObj, VL53L8CX_Result_t *p
         {
           pResult->ZoneResult[i].Signal[j] = 0.0f;
         }
+#else
+        pResult->ZoneResult[i].Signal[j] = 0.0f;
+#endif
 
         target_status = data.target_status[(VL53L8CX_NB_TARGET_PER_ZONE * i) + j];
         pResult->ZoneResult[i].Status[j] = vl53l8cx_map_target_status(target_status);

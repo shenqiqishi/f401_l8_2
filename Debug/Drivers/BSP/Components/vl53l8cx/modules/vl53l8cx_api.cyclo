@@ -10,7 +10,7 @@
 ../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_api.c:514:9:vl53l8cx_start_ranging	10
 ../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_api.c:659:9:vl53l8cx_stop_ranging	8
 ../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_api.c:713:9:vl53l8cx_check_data_ready	7
-../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_api.c:744:9:vl53l8cx_get_ranging_data	30
+../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_api.c:744:9:vl53l8cx_get_ranging_data	16
 ../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_api.c:910:9:vl53l8cx_get_resolution	1
 ../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_api.c:925:9:vl53l8cx_set_resolution	3
 ../Drivers/BSP/Components/vl53l8cx/modules/vl53l8cx_api.c:990:9:vl53l8cx_get_ranging_frequency_hz	1

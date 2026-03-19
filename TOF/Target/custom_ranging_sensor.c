@@ -306,18 +306,27 @@ int32_t CUSTOM_RANGING_SENSOR_ConfigIT(uint32_t Instance, RANGING_SENSOR_ITConfi
 int32_t CUSTOM_RANGING_SENSOR_GetDistance(uint32_t Instance, RANGING_SENSOR_Result_t *pResult)
 {
   int32_t ret;
+  int32_t drv_ret;
 
   if (Instance >= CUSTOM_RANGING_INSTANCES_NBR)
   {
     ret = BSP_ERROR_WRONG_PARAM;
   }
-  else if (CUSTOM_RANGING_Drv[Instance]->GetDistance(CUSTOM_RANGING_CompObj[Instance], pResult) < 0)
-  {
-    ret = BSP_ERROR_COMPONENT_FAILURE;
-  }
   else
   {
-    ret = BSP_ERROR_NONE;
+    drv_ret = CUSTOM_RANGING_Drv[Instance]->GetDistance(CUSTOM_RANGING_CompObj[Instance], pResult);
+    if (drv_ret == VL53L8CX_OK)
+    {
+      ret = BSP_ERROR_NONE;
+    }
+    else if (drv_ret == VL53L8CX_TIMEOUT)
+    {
+      ret = BSP_ERROR_BUSY;
+    }
+    else
+    {
+      ret = BSP_ERROR_COMPONENT_FAILURE;
+    }
   }
 
   return ret;

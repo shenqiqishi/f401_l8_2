@@ -71,11 +71,12 @@ def render_three_sensor_8x8(latest_by_sid, frame_count, parser):
             continue
 
         parts.append(
-            "S{sid} seq={seq} seq_ext={seq_ext} dt={dt}ms ts_ext={ts_ext} wrap(seq={sw},ts={tw})".format(
+            "S{sid} seq={seq} seq_ext={seq_ext} dt={dt}ms dt_sid={dt_sid}ms ts_ext={ts_ext} wrap(seq={sw},ts={tw})".format(
                 sid=sid,
                 seq=f.get("seq"),
                 seq_ext=f.get("seq_ext"),
                 dt=f.get("dt_ms"),
+                dt_sid=f.get("dt_sid_ms"),
                 ts_ext=f.get("timestamp_ms_ext"),
                 sw=int(bool(f.get("seq_wrapped"))),
                 tw=int(bool(f.get("timestamp_wrapped"))),
@@ -256,7 +257,10 @@ def format_ranging_line(frame, last_seq):
 
     timing = ""
     dt_ms = frame.get("dt_ms")
-    if dt_ms is not None:
+    dt_sid_ms = frame.get("dt_sid_ms")
+    if dt_ms is not None and dt_sid_ms is not None:
+        timing = f" dt={dt_ms}ms dt_sid={dt_sid_ms}ms"
+    elif dt_ms is not None:
         timing = f" dt={dt_ms}ms"
 
     return (
@@ -279,7 +283,10 @@ def format_error_line(frame, last_seq):
 
     timing = ""
     dt_ms = frame.get("dt_ms")
-    if dt_ms is not None:
+    dt_sid_ms = frame.get("dt_sid_ms")
+    if dt_ms is not None and dt_sid_ms is not None:
+        timing = f" dt={dt_ms}ms dt_sid={dt_sid_ms}ms"
+    elif dt_ms is not None:
         timing = f" dt={dt_ms}ms"
 
     return f"[E] seq={seq:05d} sid={sid} code={code}({name}) value={val}{timing}{lost}"
@@ -320,6 +327,7 @@ def main():
     last_seq = None
     seq_unwrap = CounterUnwrapper(bits=16)
     tick_unwrap = CounterUnwrapper(bits=32)
+    tick_unwrap_by_sid = {}
     frame_count = 0
     t0 = time.time()
     latest_by_sid = {}
@@ -340,12 +348,17 @@ def main():
                 # Wrap-aware counters for long-running capture sessions.
                 seq_ext, seq_wrapped, _ = seq_unwrap.update(f["seq"])
                 tick_ext, tick_wrapped, dt_ms = tick_unwrap.update(f["timestamp_ms"])
+                sid = f.get("sensor_id")
+                if sid not in tick_unwrap_by_sid:
+                    tick_unwrap_by_sid[sid] = CounterUnwrapper(bits=32)
+                _, _, dt_sid_ms = tick_unwrap_by_sid[sid].update(f["timestamp_ms"])
 
                 f["seq_ext"] = seq_ext
                 f["seq_wrapped"] = seq_wrapped
                 f["timestamp_ms_ext"] = tick_ext
                 f["timestamp_wrapped"] = tick_wrapped
                 f["dt_ms"] = dt_ms
+                f["dt_sid_ms"] = dt_sid_ms
 
                 seq_gap = 0
                 if last_seq is not None:

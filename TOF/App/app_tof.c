@@ -38,8 +38,8 @@ extern "C" {
 /* Private define ------------------------------------------------------------*/
 /* uncomment following to use directly the bare driver instead of the BSP */
 /* #define USE_BARE_DRIVER */
-#define TIMING_BUDGET (30U) /* 5 ms < TimingBudget < 100 ms */
-#define RANGING_FREQUENCY (10U) /* Ranging frequency Hz (shall be consistent with TimingBudget value) */
+#define TIMING_BUDGET (20U) /* 5 ms < TimingBudget < 100 ms */
+#define RANGING_FREQUENCY (20U) /* Ranging frequency Hz (shall be consistent with TimingBudget value) */
 #define POLLING_PERIOD (1)
 #define TOF_SENSOR_COUNT (CUSTOM_RANGING_INSTANCES_NBR)
 
@@ -329,7 +329,7 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
       continue;
     }
 
-    status = CUSTOM_RANGING_SENSOR_Start(instance, RS_MODE_BLOCKING_CONTINUOUS);
+    status = CUSTOM_RANGING_SENSOR_Start(instance, RS_MODE_ASYNC_CONTINUOUS);
 
     if (status != BSP_ERROR_NONE)
     {
@@ -370,6 +370,11 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
     if (status == BSP_ERROR_NONE)
     {
       print_result(CurrentSensorIdx, &Result);
+      CurrentSensorIdx = get_next_active_sensor(CurrentSensorIdx);
+    }
+    else if (status == BSP_ERROR_BUSY)
+    {
+      /* Async mode: no fresh sample for this sensor yet, move on quickly. */
       CurrentSensorIdx = get_next_active_sensor(CurrentSensorIdx);
     }
     else
@@ -634,7 +639,7 @@ static void toggle_resolution(void)
     }
 
     CUSTOM_RANGING_SENSOR_ConfigProfile(instance, &Profile);
-    status = CUSTOM_RANGING_SENSOR_Start(instance, RS_MODE_BLOCKING_CONTINUOUS);
+    status = CUSTOM_RANGING_SENSOR_Start(instance, RS_MODE_ASYNC_CONTINUOUS);
 
     if (status != BSP_ERROR_NONE)
     {
@@ -676,7 +681,7 @@ static void toggle_signal_and_ambient(void)
     }
 
     CUSTOM_RANGING_SENSOR_ConfigProfile(instance, &Profile);
-    status = CUSTOM_RANGING_SENSOR_Start(instance, RS_MODE_BLOCKING_CONTINUOUS);
+    status = CUSTOM_RANGING_SENSOR_Start(instance, RS_MODE_ASYNC_CONTINUOUS);
 
     if (status != BSP_ERROR_NONE)
     {
