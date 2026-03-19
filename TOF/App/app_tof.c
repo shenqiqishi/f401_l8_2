@@ -53,6 +53,7 @@ static int32_t status = 0;
 volatile uint8_t ToF_EventDetected = 0;
 static uint32_t CurrentSensorIdx = 0U;
 static uint8_t SensorActive[TOF_SENSOR_COUNT] = {0};
+static int32_t SensorInitError[TOF_SENSOR_COUNT] = {0};
 static uint32_t ActiveSensorCount = 0U;
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,6 +75,7 @@ static uint32_t get_first_active_sensor(void);
 static uint32_t get_next_active_sensor(uint32_t current_idx);
 static void deactivate_sensor(uint32_t instance);
 static void reset_current_sensor_index(void);
+static void tof_fatal_loop(const char *msg);
 
 void MX_TOF_Init(void)
 {
@@ -114,6 +116,7 @@ static void MX_VL53L8CX_SimpleRanging_Init(void)
 {
   /* Initialize Virtual COM Port */
   int32_t com_status = BSP_COM_Init(COM1);
+  (void)BSP_COM_SelectLogPort(COM1);
   /* Disable buffering so VCP prints appear immediately */
   setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -122,10 +125,16 @@ static void MX_VL53L8CX_SimpleRanging_Init(void)
   printf("\033[2H\033[2J");
   printf("Sensor initialization...\n");
 
+  if (com_status != BSP_ERROR_NONE)
+  {
+    tof_fatal_loop("BSP_COM_Init(COM1) failed");
+  }
+
   ActiveSensorCount = 0U;
   for (uint32_t instance = 0U; instance < TOF_SENSOR_COUNT; instance++)
   {
     SensorActive[instance] = 0U;
+    SensorInitError[instance] = BSP_ERROR_NO_INIT;
   }
 
   for (uint32_t instance = 0U; instance < TOF_SENSOR_COUNT; instance++)
@@ -135,12 +144,14 @@ static void MX_VL53L8CX_SimpleRanging_Init(void)
     if (status == BSP_ERROR_NONE)
     {
       SensorActive[instance] = 1U;
+      SensorInitError[instance] = BSP_ERROR_NONE;
       ActiveSensorCount++;
       printf("[TOF] Sensor %lu initialized successfully\r\n", (unsigned long)instance);
     }
     else
     {
       SensorActive[instance] = 0U;
+      SensorInitError[instance] = status;
       printf("CUSTOM_RANGING_SENSOR_Init skipped instance %lu (error %ld)\n",
              (unsigned long)instance, (long)status);
     }
@@ -150,8 +161,13 @@ static void MX_VL53L8CX_SimpleRanging_Init(void)
 
   if (ActiveSensorCount == 0U)
   {
-    printf("No active VL53L8CX sensors detected. Halting.\n");
-    while (1);
+    for (uint32_t instance = 0U; instance < TOF_SENSOR_COUNT; instance++)
+    {
+      printf("[TOF][DIAG] instance %lu init_error=%ld\r\n",
+             (unsigned long)instance,
+             (long)SensorInitError[instance]);
+    }
+    tof_fatal_loop("No active VL53L8CX sensors detected. Check PWR_EN/LPn wiring and I2C bus.");
   }
 }
 
@@ -301,15 +317,13 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
 
   if (ActiveSensorCount == 0U)
   {
-    printf("All VL53L8CX sensors failed to start. Halting.\n");
-    while (1);
+    tof_fatal_loop("All VL53L8CX sensors failed to start");
   }
 
   reset_current_sensor_index();
   if (CurrentSensorIdx >= TOF_SENSOR_COUNT)
   {
-    printf("No active VL53L8CX sensors available after start. Halting.\n");
-    while (1);
+    tof_fatal_loop("No active VL53L8CX sensors available after start");
   }
 
   printf("[TOF] Entering ranging loop with %lu active sensor(s)\r\n", (unsigned long)ActiveSensorCount);
@@ -371,8 +385,7 @@ static void MX_VL53L8CX_SimpleRanging_Process(void)
 
       if (ActiveSensorCount == 0U)
       {
-        printf("All VL53L8CX sensors offline. Halting.\n");
-        while (1);
+        tof_fatal_loop("All VL53L8CX sensors offline");
       }
 
       CurrentSensorIdx = get_next_active_sensor(CurrentSensorIdx);
@@ -466,8 +479,7 @@ static void toggle_resolution(void)
 
   if (ActiveSensorCount == 0U)
   {
-    printf("All VL53L8CX sensors offline after resolution toggle. Halting.\n");
-    while (1);
+    tof_fatal_loop("All VL53L8CX sensors offline after resolution toggle");
   }
 
   reset_current_sensor_index();
@@ -508,8 +520,7 @@ static void toggle_signal_and_ambient(void)
 
   if (ActiveSensorCount == 0U)
   {
-    printf("All VL53L8CX sensors offline after signal/ambient toggle. Halting.\n");
-    while (1);
+    tof_fatal_loop("All VL53L8CX sensors offline after signal/ambient toggle");
   }
 
   reset_current_sensor_index();
@@ -628,6 +639,19 @@ static void reset_current_sensor_index(void)
   if (first < TOF_SENSOR_COUNT)
   {
     CurrentSensorIdx = first;
+  }
+}
+
+static void tof_fatal_loop(const char *msg)
+{
+  while (1)
+  {
+    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+    if (msg != NULL)
+    {
+      printf("[TOF][FATAL] %s\r\n", msg);
+    }
+    HAL_Delay(500);
   }
 }
 

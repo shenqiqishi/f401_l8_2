@@ -47,6 +47,10 @@ extern "C" {
 #define CUSTOM_VL53L8CX_1 (1U)
 #endif /* Use custom ranging */
 
+#if (USE_CUSTOM_RANGING_VL53L8CX >= 3U)
+#define CUSTOM_VL53L8CX_2 (2U)
+#endif /* Use custom ranging */
+
 #define RANGING_SENSOR_VL53L8CX_ADDRESS     (VL53L8CX_DEVICE_ADDRESS)
 #define RANGING_SENSOR_NB_TARGET_PER_ZONE   (VL53L8CX_NB_TARGET_PER_ZONE)
 #define RANGING_SENSOR_MAX_NB_ZONES         (VL53L8CX_MAX_NB_ZONES)
